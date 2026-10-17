@@ -1,0 +1,12 @@
+{
+  "name": "pick-dispatch-delivery",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "analyze": "node analysis/analyze.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

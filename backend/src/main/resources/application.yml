@@ -1,0 +1,35 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: pick-dispatch
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/pick_dispatch?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  jackson:
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+
+dispatch:
+  # 快照超过该分钟数视为过期；<=0 表示关闭新鲜度校验
+  max-snapshot-age-minutes: 10
+
+app:
+  demo:
+    # 启动时写入演示主数据与库存；生产环境请设为 false
+    enabled: true
+
+logging:
+  level:
+    com.example.pickdispatch: INFO

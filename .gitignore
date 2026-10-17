@@ -1,0 +1,10 @@
+.playwright-cli/
+node_modules/
+backend/target/
+frontend/dist/
+.idea/
+.vscode/
+*.iml
+*.class
+.DS_Store
+*.log

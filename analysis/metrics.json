@@ -1,0 +1,210 @@
+{
+  "dataQuality": {
+    "rawRows": 1195,
+    "uniquePickIds": 1138,
+    "duplicateRowsRemoved": 57,
+    "duplicateGroups": 57,
+    "duplicatesAllIdentical": true,
+    "blanks": 46
+  },
+  "overall": {
+    "picks": 1138,
+    "reported": 1092,
+    "stockouts": 141,
+    "rate": 12.912087912087912
+  },
+  "lagBuckets": [
+    {
+      "label": "0-10 min",
+      "picks": 782,
+      "reported": 747,
+      "stockouts": 23,
+      "rate": 3.0789825970548863
+    },
+    {
+      "label": "10-15 min",
+      "picks": 16,
+      "reported": 16,
+      "stockouts": 7,
+      "rate": 43.75
+    },
+    {
+      "label": "15-30 min",
+      "picks": 137,
+      "reported": 134,
+      "stockouts": 46,
+      "rate": 34.32835820895522
+    },
+    {
+      "label": "30+ min",
+      "picks": 203,
+      "reported": 195,
+      "stockouts": 65,
+      "rate": 33.333333333333336
+    }
+  ],
+  "warehouses": [
+    {
+      "warehouse": "华东一号分拨仓",
+      "total": 285,
+      "fresh": {
+        "picks": 196,
+        "reported": 186,
+        "stockouts": 12,
+        "rate": 6.451612903225806
+      },
+      "stale": {
+        "picks": 89,
+        "reported": 83,
+        "stockouts": 4,
+        "rate": 4.819277108433735
+      }
+    },
+    {
+      "warehouse": "华北综合物流园",
+      "total": 270,
+      "fresh": {
+        "picks": 172,
+        "reported": 163,
+        "stockouts": 3,
+        "rate": 1.8404907975460123
+      },
+      "stale": {
+        "picks": 98,
+        "reported": 95,
+        "stockouts": 40,
+        "rate": 42.10526315789474
+      }
+    },
+    {
+      "warehouse": "华南保税中心仓",
+      "total": 263,
+      "fresh": {
+        "picks": 190,
+        "reported": 180,
+        "stockouts": 4,
+        "rate": 2.2222222222222223
+      },
+      "stale": {
+        "picks": 73,
+        "reported": 72,
+        "stockouts": 40,
+        "rate": 55.55555555555556
+      }
+    },
+    {
+      "warehouse": "西南枢纽转运仓",
+      "total": 320,
+      "fresh": {
+        "picks": 224,
+        "reported": 218,
+        "stockouts": 4,
+        "rate": 1.834862385321101
+      },
+      "stale": {
+        "picks": 96,
+        "reported": 95,
+        "stockouts": 34,
+        "rate": 35.78947368421053
+      }
+    }
+  ],
+  "gate": {
+    "rule": "snapshot_age_min >= 10 and warehouse != '华东一号分拨仓'",
+    "chosen": {
+      "thresholdMin": 10,
+      "blocked": 267,
+      "caught": 114,
+      "precision": 42.69662921348315,
+      "savedMin": 8550,
+      "costMin": 4005,
+      "netMin": 4545
+    },
+    "coverageOfStockouts": 80.85106382978724,
+    "reductionOfBaselineWaste": 42.97872340425532,
+    "global15": {
+      "thresholdMin": 15,
+      "blocked": 340,
+      "caught": 111,
+      "precision": 32.64705882352941,
+      "savedMin": 8325,
+      "costMin": 5100,
+      "netMin": 3225
+    },
+    "global10": {
+      "thresholdMin": 10,
+      "blocked": 356,
+      "caught": 118,
+      "precision": 33.146067415730336,
+      "savedMin": 8850,
+      "costMin": 5340,
+      "netMin": 3510
+    },
+    "sensitivity": [
+      {
+        "thresholdMin": 8,
+        "blocked": 326,
+        "caught": 115,
+        "precision": 35.2760736196319,
+        "savedMin": 8625,
+        "costMin": 4890,
+        "netMin": 3735
+      },
+      {
+        "thresholdMin": 10,
+        "blocked": 267,
+        "caught": 114,
+        "precision": 42.69662921348315,
+        "savedMin": 8550,
+        "costMin": 4005,
+        "netMin": 4545
+      },
+      {
+        "thresholdMin": 15,
+        "blocked": 254,
+        "caught": 107,
+        "precision": 42.125984251968504,
+        "savedMin": 8025,
+        "costMin": 3810,
+        "netMin": 4215
+      },
+      {
+        "thresholdMin": 20,
+        "blocked": 221,
+        "caught": 94,
+        "precision": 42.53393665158371,
+        "savedMin": 7050,
+        "costMin": 3315,
+        "netMin": 3735
+      },
+      {
+        "thresholdMin": 30,
+        "blocked": 153,
+        "caught": 62,
+        "precision": 40.52287581699346,
+        "savedMin": 4650,
+        "costMin": 2295,
+        "netMin": 2355
+      }
+    ],
+    "extraVsGlobal15": 1320,
+    "excludedWarehouse": {
+      "name": "华东一号分拨仓",
+      "stalePicks": 89,
+      "stockouts": 4,
+      "rate": 4.819277108433735,
+      "netIfBlockedMin": -1035
+    }
+  },
+  "baseline": {
+    "stockouts": 141,
+    "wasteMin": 10575
+  },
+  "stockQtyEvidence": {
+    "zeroStockQtyPicks": 40,
+    "zeroStockQtyReported": 38,
+    "zeroStockQtyStockouts": 10,
+    "zeroStockQtyRate": 26.31578947368421,
+    "zeroStockQtySuccesses": 28
+  }
+}
