@@ -1,11 +1,8 @@
 import axios from 'axios'
 
-const base = import.meta.env.BASE_URL.endsWith('/')
-  ? import.meta.env.BASE_URL
-  : `${import.meta.env.BASE_URL}/`
-
 const client = axios.create({
-  baseURL: `${base}api`,
+  // Backend context-path is /backend; the frontend is served under /front/.
+  baseURL: '/backend/api',
   timeout: 15000
 })
 

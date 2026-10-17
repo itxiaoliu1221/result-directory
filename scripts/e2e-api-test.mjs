@@ -10,7 +10,7 @@
  * 可通过 E2E_BASE / E2E_WS 覆盖地址。
  */
 
-const BASE = process.env.E2E_BASE || 'http://localhost:8099/api'
+const BASE = process.env.E2E_BASE || 'http://localhost:8099/backend/api'
 const WS_URL = process.env.E2E_WS || BASE.replace(/^http/, 'ws').replace(/\/api$/, '') + '/ws/picking'
 
 let passed = 0
@@ -350,7 +350,7 @@ async function main() {
     }
     ws.onmessage = (message) => events.push(JSON.parse(message.data))
   })
-  check('WebSocket /ws/picking connected', true)
+  check('WebSocket /backend/ws/picking connected', true)
 
   async function waitForEvent(type, predicate = () => true, timeout = 8000) {
     const start = Date.now()

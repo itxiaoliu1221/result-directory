@@ -474,12 +474,13 @@ dispatch:
 
 ## 13. 服务器演示部署（2026-10-17）
 
-- 公网入口：`http://39.106.14.83/pick/`，服务器只开放 80。
+- 公网入口：`http://39.106.14.83/front/`，服务器只开放 80。
 - 宿主机 nginx 路径转发：
-  - `/pick/api/` → `127.0.0.1:7999/api/`
-  - `/pick/ws/` → `127.0.0.1:7999/ws/`（WebSocket Upgrade）
-  - `/pick/` → `127.0.0.1:7998/`（前端静态 SPA）
+  - 前端 `/front/` → `127.0.0.1:7998/`
+  - 后端 API `/backend/api/` → `127.0.0.1:7999/backend/api/`
+  - WebSocket `/backend/ws/` → `127.0.0.1:7999/backend/ws/`（Upgrade）
+- 后端 Spring Boot context-path：`/backend`；前端 API base `/backend/api`，WebSocket `/backend/ws/picking`。
 - 容器：前端 7998:80、后端 7999:7999，均只绑定 `127.0.0.1`；统一接入 `pick-dispatch-net`。
-- 前端 Vite base 为 `/pick/`，Vue Router、静态资源、API、WebSocket 都带 `/pick` 前缀。
+- 前端 Vite base 为 `/front/`，Vue Router、静态资源和页面路径都带 `/front` 前缀。
 - 侧边栏拆为三个角色入口：仪表盘（运营）、用户下单（用户）、PDA 拣货（仓库）；下方保留运营管理页。
-- 新增 `deploy/nginx-pick.conf`，重写 `docs/docker-deploy.md`。
+- 新增 `deploy/nginx-demo.conf`，重写 `docs/docker-deploy.md`。

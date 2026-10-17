@@ -225,3 +225,36 @@
 - 本地 `http://localhost:7998/pick/`：仪表盘、用户下单、PDA 三个页面均正常，侧边栏三个角色入口可见。
 - API 请求走 `/pick/api`（Vite 代理到 7999），WebSocket 显示“实时已连接”。
 - 服务器端到端验证需在部署后执行，步骤见 `docs/docker-deploy.md` 第 6、7 节。
+
+## 11. 拆分前端 /front 与后端 /backend 前缀（2026-10-17）
+
+**提示词（摘要）**
+
+- “前端页面加个 `/front` 前缀，后端加个 `/backend` 前缀，避免与原有的容器前缀重复导致路由混乱。”
+
+**AI 做了什么**
+
+- 后端增加 `server.servlet.context-path=/backend`，API 实际路径变为 `/backend/api/...`，WebSocket 为 `/backend/ws/picking`。
+- 前端 Vite base 改为 `/front/`，Vue Router、静态资源、favicon 都走 `/front/`。
+- 前端 API base 固定为 `/backend/api`，WebSocket 固定为 `ws://<host>/backend/ws/picking`。
+- Vite dev proxy 改为 `/backend/api`、`/backend/ws`，由于后端已有 context-path，不再做路径重写。
+- 宿主机 nginx 配置重新整理为：
+  - `/front/` → `127.0.0.1:7998/`（去掉 `/front` 前缀）
+  - `/backend/api/` → `127.0.0.1:7999/backend/api/`（保留路径）
+  - `/backend/ws/` → `127.0.0.1:7999/backend/ws/`（WebSocket Upgrade）
+- 配置文件名从 `deploy/nginx-pick.conf` 改为 `deploy/nginx-demo.conf`。
+- 同步更新 Docker healthcheck、README、Docker 部署文档、PLAN 和截图。
+
+**AI 哪里不对 / 如何修正**
+
+- 用 sed 批量把 `/pick` 替换为 `/front` 时，误伤了 `picks.csv`、`pick-tasks`、`picking`、`pick_dispatch`、`pick-dispatch` 等词，README 出现 `fronts.csv`、`front-tasks`、`fronting` 等错误；已逐项修正并全局复查。
+- 最初考虑让 nginx 去掉 `/backend` 前缀，但这样后端 context-path 与公开路径不一致；改为后端直接使用 `/backend` context-path，nginx 保留完整路径，减少路由歧义。
+- 本机没有 Docker/nginx，无法实际启动容器和宿主机 nginx；已通过 Vite 7998 + 后端 7999 验证 `/front/`、`/backend/api` 和 WebSocket，Docker/nginx 配置按路径规则核对。
+
+**验证**
+
+- 后端 `mvn test`：15/15 通过。
+- 前端 `npm run build`：通过，产物引用 `/front/assets/...`。
+- 本地 `http://localhost:7998/front/`：仪表盘、`/front/shop`、`/front/pda` 正常，侧边栏三个角色入口可见。
+- 页面 API 请求为 `/backend/api/...`，WebSocket 显示“实时已连接”。
+- 服务器部署需在 80 端口 nginx 上验证：`/front/`、`/backend/api/meta/warehouses`、`/backend/ws/picking`。

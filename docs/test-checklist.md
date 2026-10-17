@@ -10,10 +10,10 @@
 | 数据库 | 本机 MySQL 8.0.33，独立测试库 `pick_dispatch_e2e` |
 | 测试数据 | `database/init-test.sql`（2 个测试仓库、8 个测试商品、15 条库存） |
 | 后端 | `pick-dispatch-1.0.0.jar`，端口 8099，`APP_DEMO_ENABLED=false` |
-| 前端 | Vite dev server，端口 5174，`VITE_BACKEND=http://localhost:8099` |
+| 前端 | Vite dev server，端口 5174，`VITE_DEV_BACKEND=http://localhost:8099 VITE_APP_BASE=/front/` |
 | 浏览器 | `playwright-cli` 0.1.22 + 本地 Chrome，会话 `admin` / `shop` / `pda` |
 
-测试使用隔离的 8099/5174 环境；当前演示部署为后端 7999、前端 7998，并通过宿主机 nginx 的 `/pick/` 路径对外提供。原有的 `pick_dispatch` 库未被测试过程修改。API 测试与浏览器测试分别从 `init-test.sql` 重新初始化测试库，两轮互不影响。
+测试使用隔离的 8099/5174 环境；当前演示部署为后端 7999、前端 7998，并通过宿主机 nginx 的 `/front/`（页面）和 `/backend/`（API/WS）路径对外提供。原有的 `pick_dispatch` 库未被测试过程修改。API 测试与浏览器测试分别从 `init-test.sql` 重新初始化测试库，两轮互不影响。
 
 ## 2. 测试顺序与理由
 

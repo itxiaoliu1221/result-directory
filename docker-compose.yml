@@ -47,7 +47,7 @@ services:
       # Only the host nginx needs these ports; keep them on loopback.
       - "127.0.0.1:${API_PORT:-7999}:7999"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:7999/api/meta/warehouses"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:7999/backend/api/meta/warehouses"]
       interval: 10s
       timeout: 5s
       retries: 12
