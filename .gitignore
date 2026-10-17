@@ -1,5 +1,7 @@
 .playwright-cli/
 node_modules/
+.env
+!.env.example
 backend/target/
 frontend/dist/
 .idea/

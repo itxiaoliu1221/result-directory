@@ -129,3 +129,25 @@
 - 浏览器联调：下单 → PDA 收到实时通知 → 认领（订单变为拣货中）→ 拣出完成（订单变为已完成）。
 - 截图：`docs/screenshots/shop.png`、`docs/screenshots/pda.png`、`docs/screenshots/pda-realtime.png`。
 
+## 8. Docker 部署与测试初始化数据
+
+**提示词（摘要）**
+
+- “给我一个测试的 sql 初始化文件，我需要用 docker 部署在远端服务器，测试 sql 里面包含一些初始化数据，避免项目部署后什么都没有。”
+- “测试数据不能包含现在数据的仓库内容订单内容等，可以给仓库取名测试仓库代指，避免数据泄露。”
+- “再给我一个 docker 部署文档，都放在仓库里一起提交。”
+
+**AI 做了什么**
+
+- 新增 `database/init-test.sql`：完整表结构 + 2 个测试仓库、8 个测试商品、15 条库存/快照、7 个任务、7 个订单、1 张补货单和通知日志。
+- 新增 `docker-compose.yml`、`backend/Dockerfile`、`frontend/Dockerfile`、`frontend/nginx.conf`、`.env.example` 和 `docs/docker-deploy.md`。
+- Compose 中设置 `APP_DEMO_ENABLED=false`，避免应用自带的演示数据覆盖测试库；测试库只使用虚构的“测试仓库/测试商品/测试订单”。
+- Nginx 同时代理 `/api` 和 `/ws`，保证 Docker 部署后 WebSocket 实时通知可用。
+
+**AI 哪里不对 / 如何修正**
+
+- 最初只打算在 SQL 里写 INSERT，但 MySQL 容器执行初始化脚本时 Hibernate 还没建表，脚本会直接失败；改为按本机 MySQL 8.0.33 实际生成的 DDL 一并建表。
+- 第一版库存数量没有扣掉测试数据中“已下发/已完成”任务占用的数量，导致库存与任务不一致；改为记录扣减后的可用库存（如仓库A 商品01 从 50 改为 47）。
+- 库存 `synced_at` 是初始化时刻，超过 10 分钟后所有库存都会被判为过期；已在部署文档中说明，并提供只刷新仓库A、保留仓库B过期样例的 SQL。
+- 本机没有安装 Docker，无法实际构建镜像；本次用本机 MySQL 的临时库执行初始化脚本，并以 `APP_DEMO_ENABLED=false` 启动后端验证了表结构、种子数据和下单/扣减/通知链路，验证后已删除临时库。
+

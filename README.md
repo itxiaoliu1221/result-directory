@@ -251,7 +251,18 @@ npm run dev
 
 Vite 已将 `/api` 与 `/ws` 代理到 `http://localhost:8080`。如果后端不在 8080，可以设置 `VITE_BACKEND=http://localhost:8081` 后再启动前端。
 
-### 4. 关闭演示数据
+### 4. Docker 一键部署（测试环境）
+
+仓库提供 `docker-compose.yml`、前后端 Dockerfile 和测试初始化脚本 `database/init-test.sql`。测试库只包含虚构的“测试仓库 / 测试商品 / 测试订单”，不含真实业务数据。
+
+```bash
+cp .env.example .env    # 修改 MySQL 密码和对外端口
+docker compose up -d --build
+```
+
+启动后访问 `http://<服务器IP>:8080/`，用户下单页为 `/shop`，仓库 PDA 为 `/pda`。完整步骤、数据重置、快照刷新和常见问题见 [docs/docker-deploy.md](docs/docker-deploy.md)。
+
+### 5. 关闭演示数据
 
 ```yaml
 app:
@@ -355,6 +366,9 @@ frontend/               Vue 3 + Vite + Element Plus
   └─ src/views/PdaView.vue    仓库 PDA 页
 data/picks.csv          提供的原始数据（仅用于分析）
 database/init.sql       数据库初始化
+database/init-test.sql  测试环境建表 + 虚构测试数据
+docker-compose.yml      Docker Compose 编排（MySQL + 后端 + 前端）
+docs/docker-deploy.md   Docker 部署文档
 docs/screenshots/       UI 截图（含下单页、PDA、实时通知）
 PLAN.md                 实施计划
 README.md               本文件

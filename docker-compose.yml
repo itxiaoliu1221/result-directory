@@ -1,0 +1,65 @@
+name: pick-dispatch
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: pick-dispatch-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root}
+      MYSQL_DATABASE: pick_dispatch
+      MYSQL_USER: ${MYSQL_USER:-pick}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me-pick}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # Only executed when the data volume is empty (first boot).
+      - ./database/init-test.sql:/docker-entrypoint-initdb.d/10-init-test.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysqladmin ping -h 127.0.0.1 -uroot --silent']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+    container_name: pick-dispatch-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      DB_URL: "jdbc:mysql://mysql:3306/pick_dispatch?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false"
+      DB_USERNAME: ${MYSQL_USER:-pick}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-change-me-pick}
+      # Test data comes from database/init-test.sql, so the built-in demo seeder stays off.
+      APP_DEMO_ENABLED: "false"
+    ports:
+      - "${API_PORT:-8081}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/meta/warehouses"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: pick-dispatch-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  mysql-data:
