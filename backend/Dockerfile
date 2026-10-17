@@ -26,6 +26,6 @@ ENV TZ=Asia/Shanghai \
     JAVA_TOOL_OPTIONS="-Duser.timezone=Asia/Shanghai"
 
 USER appuser
-EXPOSE 8080
+EXPOSE 7999
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

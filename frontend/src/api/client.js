@@ -1,7 +1,11 @@
 import axios from 'axios'
 
+const base = import.meta.env.BASE_URL.endsWith('/')
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`
+
 const client = axios.create({
-  baseURL: '/api',
+  baseURL: `${base}api`,
   timeout: 15000
 })
 

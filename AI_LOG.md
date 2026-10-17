@@ -177,3 +177,51 @@
 - 浏览器端到端：12/12 通过，覆盖下单、PDA 实时通知、认领、拣出、缺货、补货自动下发；三个浏览器会话控制台 0 error / 0 warning。
 - 未发现需要修复的产品缺陷。
 
+
+## 10. 服务器部署：三入口侧边栏 + 80 端口路径转发（2026-10-17）
+
+**提示词（摘要）**
+
+- “我需要在服务器上部署前后端提供演示地址。”
+- “仪表盘、用户页面、PDA 页面做成三个侧边栏，表示不同用户的入口。”
+- “服务器只开放 80，用 nginx 转发；前端端口 7998、后端 7999，根据路径由 80 转发。”
+- “容器在同一个 NAT 网络下，保证 Docker 构建后 WebSocket 能连通。”
+- “服务器 IP 是 http://39.106.14.83/；更新文档，docker 部署文档重新拟一份。”
+
+**AI 做了什么**
+
+- 前端改为统一的侧边栏布局，不再让 `/shop`、`/pda` 走独立布局：
+  - “角色入口”分组：仪表盘（运营）、用户下单（用户）、PDA 拣货（仓库）；
+  - “运营管理”分组：任务管理、待下发队列、补货/同步、库存。
+- 应用改为部署在 `/pick/` 子路径：
+  - Vite `base=/pick/`；
+  - Vue Router `createWebHistory(import.meta.env.BASE_URL)`；
+  - API 使用 `/pick/api`，WebSocket 使用 `ws://<host>/pick/ws/picking`；
+  - 静态资源、favicon 都带 `/pick/` 前缀。
+- 后端端口改为 **7999**；前端 Vite 端口改为 **7998**，监听 `0.0.0.0`。
+- Docker：
+  - `pick-dispatch-net` 统一 NAT 网络；
+  - 前端 7998:80、后端 7999:7999，均只绑定 `127.0.0.1`；
+  - 前端 Dockerfile 使用 `VITE_APP_BASE=/pick/` 构建；
+  - 前端容器 nginx 负责 SPA 回退，并保留 `/api`、`/ws` 兜底代理。
+- 宿主机 nginx：
+  - `/pick/api/` → `127.0.0.1:7999/api/`
+  - `/pick/ws/` → `127.0.0.1:7999/ws/`（WebSocket Upgrade）
+  - `/pick/` → `127.0.0.1:7998/`
+  - 新增 `deploy/nginx-pick.conf`。
+- 重写 `docs/docker-deploy.md`，覆盖架构、路径、容器启动、宿主机 nginx、WebSocket 验证、常见问题和安全边界。
+
+**AI 哪里不对 / 如何修正**
+
+- 最初保留 `/shop`、`/pda` 的独立布局，导致这两个页面没有侧边栏；改为统一 shell 布局，并把三个角色入口放进侧边栏。
+- 只设置 API 前缀不够：Vite 静态资源和 Vue Router 也必须使用 `/pick/` base，否则 nginx 去掉前缀后资源路径会错；已同时修改 `vite.config.js`、router、favicon 和 API/WS 地址。
+- 原有 Docker nginx 仍把 `/api`、`/ws` 代理到 `backend:8080`，与新的 7999 端口和 `/pick/` 路径不匹配；已改为 7999，并增加宿主机 nginx 路径配置。
+- 本机没有 Docker/nginx，无法实际执行容器与 nginx 配置；已通过 Vite 7998 + 后端 7999 验证 `/pick/`、`/pick/api`、WebSocket 和三个页面，Docker/nginx 配置按路径规则逐项核对，并在文档中给出验证命令。
+
+**验证**
+
+- 后端 `mvn test`：15/15 通过。
+- 前端 `npm run build`：通过；构建产物引用 `/pick/assets/...`。
+- 本地 `http://localhost:7998/pick/`：仪表盘、用户下单、PDA 三个页面均正常，侧边栏三个角色入口可见。
+- API 请求走 `/pick/api`（Vite 代理到 7999），WebSocket 显示“实时已连接”。
+- 服务器端到端验证需在部署后执行，步骤见 `docs/docker-deploy.md` 第 6、7 节。

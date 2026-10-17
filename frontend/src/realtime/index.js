@@ -13,7 +13,10 @@ let manualClose = false
 
 function wsUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws/picking`
+  const base = import.meta.env.BASE_URL.endsWith('/')
+    ? import.meta.env.BASE_URL
+    : `${import.meta.env.BASE_URL}/`
+  return `${protocol}//${window.location.host}${base}ws/picking`
 }
 
 function notify(event) {

@@ -108,11 +108,13 @@
 
 ### 前端
 
-Vue 3 + Element Plus，七个页面：
+Vue 3 + Element Plus，侧边栏按用户角色分成三个入口：
 
-- **用户下单 `/shop`**：选择商品/数量/收货人，可选仓库或自动分配；订单列表实时展示“待分配 / 已分配 / 拣货中 / 已完成 / 缺货”。
-- **PDA 拣货 `/pda`**：模拟仓库手持终端；待认领任务卡片、认领、拣出完成/缺货回传；WebSocket 新任务弹窗通知。
-- **仪表盘**：任务总数、待下发、已下发、库存快照过期数、待下发队列、库存关注。
+- **仪表盘 `/pick/`（运营入口）**：任务总数、待下发、已下发、库存快照过期数、待下发队列、库存关注。
+- **用户下单 `/pick/shop`（用户入口）**：选择商品/数量/收货人，可选仓库或自动分配；订单列表实时展示“待分配 / 已分配 / 拣货中 / 已完成 / 缺货”。
+- **PDA 拣货 `/pick/pda`（仓库入口）**：模拟仓库手持终端；待认领任务卡片、认领、拣出完成/缺货回传；WebSocket 新任务弹窗通知。
+
+侧边栏“运营管理”分组下还有任务管理、待下发队列、补货/同步、库存四个运营页。
 - **任务管理**：创建任务、按状态/仓库/货物筛选、回传拣出/缺货。
 - **待下发队列**：等待时长、原因、创建时快照年龄。
 - **补货 / 同步**：多明细补货，提交后展示自动下发的任务。
@@ -233,7 +235,7 @@ mvn spring-boot:run
 
 > 本机 PATH 中的 `java` 是 1.8，Maven 使用 `D:\java\jdk`（17）。请确保使用 JDK 17 启动。
 
-启动后访问 `http://localhost:8080/api/meta/warehouses` 验证。
+启动后访问 `http://localhost:7999/api/meta/warehouses` 验证。
 
 ### 3. 前端
 
@@ -243,24 +245,29 @@ npm install
 npm run dev
 ```
 
-打开：
+前端默认监听 **7998**，应用挂在 **`/pick/`** 路径下：
 
-- 调度台：`http://localhost:5173`
-- 用户下单：`http://localhost:5173/shop`
-- 仓库 PDA：`http://localhost:5173/pda`
+- 调度台：`http://localhost:7998/pick/`
+- 用户下单：`http://localhost:7998/pick/shop`
+- 仓库 PDA：`http://localhost:7998/pick/pda`
 
-Vite 已将 `/api` 与 `/ws` 代理到 `http://localhost:8080`。如果后端不在 8080，可以设置 `VITE_BACKEND=http://localhost:8081` 后再启动前端。
+Vite 将 `/pick/api` 和 `/pick/ws` 代理到后端 `http://localhost:7999`。`/pick` 是默认部署前缀，可通过 `VITE_APP_BASE` 覆盖（例如 `VITE_APP_BASE=/` 用于根路径）。
 
-### 4. Docker 一键部署（测试环境）
+### 4. Docker 部署（服务器 80 端口 + /pick 路径）
 
-仓库提供 `docker-compose.yml`、前后端 Dockerfile 和测试初始化脚本 `database/init-test.sql`。测试库只包含虚构的“测试仓库 / 测试商品 / 测试订单”，不含真实业务数据。
+服务器只对外开放 80，由宿主机 nginx 按路径转发；前端容器 7998、后端容器 7999 只监听 `127.0.0.1`。完整步骤、nginx 配置、WebSocket 验证和常见问题见 **[docs/docker-deploy.md](docs/docker-deploy.md)**。
 
 ```bash
-cp .env.example .env    # 修改 MySQL 密码和对外端口
+cp .env.example .env    # 修改 MySQL 密码；默认 WEB_PORT=7998、API_PORT=7999
 docker compose up -d --build
 ```
 
-启动后访问 `http://<服务器IP>:8080/`，用户下单页为 `/shop`，仓库 PDA 为 `/pda`。完整步骤、数据重置、快照刷新和常见问题见 [docs/docker-deploy.md](docs/docker-deploy.md)。
+部署完成后访问：
+
+- 调度台：`http://39.106.14.83/pick/`
+- 用户下单：`http://39.106.14.83/pick/shop`
+- 仓库 PDA：`http://39.106.14.83/pick/pda`
+- API 健康检查：`http://39.106.14.83/pick/api/meta/warehouses`
 
 ### 5. 关闭演示数据
 
@@ -270,9 +277,11 @@ app:
     enabled: false
 ```
 
-演示数据包括 4 个仓库、10 个品类、40 条库存和 2 条待下发任务；订单由用户在 `/shop` 页面创建。**库存数量为演示值，仅用于展示三种场景，不作为业务结论依据。**
+演示数据包括 4 个仓库、10 个品类、40 条库存和 2 条待下发任务；订单由用户在 `/pick/shop` 页面创建。**库存数量为演示值，仅用于展示三种场景，不作为业务结论依据。**
 
 ## API 一览
+
+下表是**后端原始路径**；前端和对外访问统一带 `/pick` 前缀（API `/pick/api/...`，WebSocket `/pick/ws/picking`），由宿主机 nginx 去掉前缀后转发。
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
@@ -367,8 +376,9 @@ frontend/               Vue 3 + Vite + Element Plus
 data/picks.csv          提供的原始数据（仅用于分析）
 database/init.sql       数据库初始化
 database/init-test.sql  测试环境建表 + 虚构测试数据
-docker-compose.yml      Docker Compose 编排（MySQL + 后端 + 前端）
-docs/docker-deploy.md   Docker 部署文档
+docker-compose.yml      Docker Compose 编排（MySQL + 后端 + 前端，pick-dispatch-net）
+deploy/nginx-pick.conf  宿主机 nginx 80 端口 /pick 路径配置
+docs/docker-deploy.md   Docker 部署文档（80 端口 + /pick 路径）
 docs/screenshots/       UI 截图（含下单页、PDA、实时通知）
 PLAN.md                 实施计划
 README.md               本文件

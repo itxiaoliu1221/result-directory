@@ -8,15 +8,15 @@ import ShopView from '../views/ShopView.vue'
 import PdaView from '../views/PdaView.vue'
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', name: 'dashboard', component: DashboardView },
     { path: '/tasks', name: 'tasks', component: TaskView },
     { path: '/pending', name: 'pending', component: PendingView },
     { path: '/replenishment', name: 'replenishment', component: ReplenishmentView },
     { path: '/inventory', name: 'inventory', component: InventoryView },
-    { path: '/shop', name: 'shop', component: ShopView, meta: { standalone: true } },
-    { path: '/pda', name: 'pda', component: PdaView, meta: { standalone: true } }
+    { path: '/shop', name: 'shop', component: ShopView },
+    { path: '/pda', name: 'pda', component: PdaView }
   ]
 })
 

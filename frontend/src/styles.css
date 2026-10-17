@@ -101,6 +101,41 @@ body {
   box-shadow: 0 8px 18px rgba(47, 107, 255, 0.25);
 }
 
+.nav-menu .el-menu-item {
+  display: flex;
+  align-items: center;
+}
+
+.nav-menu .el-menu-item-group__title {
+  padding: 14px 18px 6px !important;
+  color: #8ea1c2;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.nav-role {
+  margin-left: auto;
+  padding: 1px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  color: #a9bcdb;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.shop-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.main .pda-page {
+  min-height: auto;
+  padding: 0;
+  background: transparent;
+}
+
 .sidebar-footer {
   margin-top: auto;
   display: flex;

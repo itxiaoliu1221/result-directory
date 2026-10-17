@@ -25,6 +25,8 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
+    networks:
+      - pick-net
 
   backend:
     build:
@@ -42,13 +44,16 @@ services:
       # Test data comes from database/init-test.sql, so the built-in demo seeder stays off.
       APP_DEMO_ENABLED: "false"
     ports:
-      - "${API_PORT:-8081}:8080"
+      # Only the host nginx needs these ports; keep them on loopback.
+      - "127.0.0.1:${API_PORT:-7999}:7999"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/meta/warehouses"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:7999/api/meta/warehouses"]
       interval: 10s
       timeout: 5s
       retries: 12
       start_period: 45s
+    networks:
+      - pick-net
 
   frontend:
     build:
@@ -59,7 +64,15 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "${WEB_PORT:-8080}:80"
+      # Only the host nginx needs this port; keep it on loopback.
+      - "127.0.0.1:${WEB_PORT:-7998}:80"
+    networks:
+      - pick-net
+
+networks:
+  pick-net:
+    name: pick-dispatch-net
+    driver: bridge
 
 volumes:
   mysql-data:

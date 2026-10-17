@@ -1,23 +1,6 @@
 <template>
-  <div class="portal shop-portal">
-    <header class="portal-header">
-      <div class="portal-brand">
-        <div class="brand-mark">W</div>
-        <div>
-          <h1>鲜达商城</h1>
-          <p>多仓履约 · 库存实时调度</p>
-        </div>
-      </div>
-      <nav class="portal-links">
-        <router-link to="/">调度台</router-link>
-        <router-link to="/pda">PDA 拣货</router-link>
-        <el-tag :type="realtime.connected ? 'success' : 'warning'" effect="plain" round>
-          {{ realtime.connected ? '实时已连接' : '实时重连中' }}
-        </el-tag>
-      </nav>
-    </header>
-
-    <main class="shop-main">
+  <div class="page shop-page">
+    <div class="shop-content">
       <section class="shop-hero">
         <div class="shop-hero-copy">
           <span class="eyebrow">MULTI-WAREHOUSE FULFILLMENT</span>
@@ -133,7 +116,7 @@
           </div>
         </section>
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
@@ -146,14 +129,13 @@ import {
   fetchOrders,
   fetchWarehouses
 } from '../api'
-import { onRealtime, useRealtime } from '../realtime'
+import { onRealtime } from '../realtime'
 import {
   formatTime,
   orderStatusLabel,
   orderStatusType
 } from '../utils/format'
 
-const realtime = useRealtime()
 const goods = ref([])
 const warehouses = ref([])
 const orders = ref([])

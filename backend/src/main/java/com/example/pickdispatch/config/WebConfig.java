@@ -12,7 +12,12 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addMapping("/api/**")
                 // Local demo only: allow the Vue dev server on any local port.
                 // Restrict this to known origins before deploying publicly.
-                .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
+                .allowedOriginPatterns(
+                        "http://localhost:*",
+                        "http://127.0.0.1:*",
+                        "http://39.106.14.83",
+                        "http://39.106.14.83:*"
+                )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*");
     }

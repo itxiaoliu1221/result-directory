@@ -1,273 +1,267 @@
-# Docker 部署指南（测试环境）
+# Docker 部署指南（80 端口 + /pick 路径）
 
-本文档描述如何用 Docker Compose 在一台远端 Linux 服务器上启动 MySQL、Spring Boot 后端和 Vue 前端，并在首次启动时自动写入一套虚构的测试数据。
+本文档描述如何在服务器 `http://39.106.14.83/` 上部署本项目。服务器**只对外开放 80 端口**，由宿主机 nginx 按路径转发到 Docker 容器；前端容器端口 7998、后端容器端口 7999 只监听 `127.0.0.1`，不直接对外暴露。
 
-> 测试数据全部为“测试仓库 / 测试商品 / 测试订单”，不含任何真实仓库、订单或库存信息。
-> `database/init-test.sql` 会先删除再重建业务表，**只能用于测试环境**。
+测试数据全部为虚构的“测试仓库 / 测试商品 / 测试订单”，不含真实业务数据。`database/init-test.sql` 只用于测试环境。
 
 ## 1. 部署结构
 
 ```text
 浏览器 / PDA
-     │  http://<服务器IP>:8080
+     │
+     │  http://39.106.14.83/  (仅 80)
      ▼
-┌─────────────────────────────┐
-│ frontend (nginx:80)         │
-│  /        → Vue 静态资源     │
-│  /api/*   → backend:8080    │
-│  /ws/*    → backend:8080    │
-└─────────────┬───────────────┘
-              │ Docker 内部网络
-              ▼
-┌─────────────────────────────┐
-│ backend (Spring Boot:8080)  │
-└─────────────┬───────────────┘
-              ▼
-┌─────────────────────────────┐
-│ mysql (MySQL 8.0:3306)      │
-│ 数据卷：mysql-data           │
-│ 首次启动执行 init-test.sql   │
-└─────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ 宿主机 nginx                                  │
+│  /pick/api/  → 127.0.0.1:7999/api/...        │
+│  /pick/ws/   → 127.0.0.1:7999/ws/...         │
+│  /pick/      → 127.0.0.1:7998/...            │
+└───────────────┬──────────────────────────────┘
+                │ Docker NAT 网络 pick-dispatch-net
+                ▼
+┌───────────────────────┐      ┌───────────────────────┐
+│ frontend (nginx:80)   │      │ backend (Spring:7999) │
+│ 对外映射 127.0.0.1:7998│      │ 对外映射 127.0.0.1:7999│
+└───────────────────────┘      └───────────┬───────────┘
+                                           ▼
+                                ┌───────────────────────┐
+                                │ mysql (3306，仅内网)   │
+                                └───────────────────────┘
 ```
 
-端口规划：
+路径约定：
 
-| 服务 | 容器端口 | 默认宿主端口 | 是否对外 | 说明 |
-|---|---:|---:|---|---|
-| frontend | 80 | `WEB_PORT=8080` | 是 | 前端页面入口，同时代理 API 和 WebSocket |
-| backend | 8080 | `API_PORT=8081` | 可选 | 便于直接用 curl 调接口；不需要可删除 compose 中的端口映射 |
-| mysql | 3306 | 不映射 | 否 | 仅容器网络内访问 |
+| 对外路径 | 转发到 | 用途 |
+|---|---|---|
+| `/pick/` | `127.0.0.1:7998/` | 前端 SPA（静态资源、`/shop`、`/pda`） |
+| `/pick/api/...` | `127.0.0.1:7999/api/...` | REST API |
+| `/pick/ws/picking` | `127.0.0.1:7999/ws/picking` | WebSocket 实时通知 |
 
-## 2. 仓库中的部署文件
+访问地址：
+
+- 调度台：`http://39.106.14.83/pick/`
+- 用户下单：`http://39.106.14.83/pick/shop`
+- 仓库 PDA：`http://39.106.14.83/pick/pda`
+- API 健康检查：`http://39.106.14.83/pick/api/meta/warehouses`
+
+## 2. 前置条件
+
+- Linux 服务器，Docker Engine 24+、Docker Compose v2。
+- 宿主机 nginx 已安装并监听 80。
+- 防火墙/安全组只放行 80；**不要**放行 7998、7999、3306。
+- 服务器能访问 Docker Hub、Maven Central、npm registry；内网环境先配置镜像源。
+- 如果 80 端口已被其他站点占用，把下面的 `server` 块合并到现有 nginx 配置中即可，路径 `/pick/` 不冲突。
+
+## 3. 仓库中的部署文件
 
 | 路径 | 作用 |
 |---|---|
-| `docker-compose.yml` | MySQL、后端、前端三个服务的编排 |
-| `backend/Dockerfile` | 多阶段构建 Spring Boot 可执行 jar，运行时 Java 17 |
+| `docker-compose.yml` | MySQL、后端、前端三个服务，统一接入 `pick-dispatch-net` |
+| `backend/Dockerfile` | 多阶段构建 Spring Boot，运行端口 7999 |
 | `backend/.dockerignore` | 排除 `target/`、`.idea/` |
-| `frontend/Dockerfile` | Node 20 构建 Vue，Nginx 托管 `dist/` |
-| `frontend/nginx.conf` | SPA 路由回退、`/api` 反向代理、`/ws` WebSocket 代理 |
-| `frontend/.dockerignore` | 排除本地 `node_modules/`、`dist/` |
+| `frontend/Dockerfile` | Node 20 构建 Vue，Nginx 托管静态文件 |
+| `frontend/nginx.conf` | 前端容器内的 SPA 路由回退 + `/api`、`/ws` 兜底代理 |
+| `deploy/nginx-pick.conf` | 宿主机 nginx 的完整 server 块 |
 | `database/init-test.sql` | 测试库表结构 + 虚构测试数据 |
 | `.env.example` | 端口和 MySQL 账号模板 |
 
-## 3. 前置条件
+前端构建时使用 `VITE_APP_BASE=/pick/`（Dockerfile 默认值），因此静态资源 URL 都带 `/pick/` 前缀；宿主机 nginx 在转发到前端容器时会去掉该前缀。
 
-- Linux 服务器，建议 2 核 4 GB 以上，磁盘 10 GB 以上。
-- Docker Engine 24+，Docker Compose v2（`docker compose version` 可用）。
-- 服务器可访问 Docker Hub、Maven Central 和 npm registry；内网环境请先配置镜像源。
-- 防火墙放行 `WEB_PORT`（默认 8080）；如需要直接调 API，再放行 `API_PORT`（默认 8081）。
-- 不要把 3306 暴露到公网。
-
-## 4. 快速部署
-
-### 4.1 获取代码
+## 4. 启动容器
 
 ```bash
-git clone <仓库地址> pick-dispatch
-cd pick-dispatch
-```
-
-### 4.2 配置环境变量
-
-```bash
+cd /path/to/result-directory
 cp .env.example .env
-vi .env
-```
-
-至少修改 MySQL 密码：
-
-```dotenv
-WEB_PORT=8080
-API_PORT=8081
-
-MYSQL_ROOT_PASSWORD=<强密码>
-MYSQL_USER=pick
-MYSQL_PASSWORD=<强密码>
-```
-
-`.env` 已被 `.gitignore` 忽略，不会提交到仓库。
-
-### 4.3 构建并启动
-
-```bash
+vi .env          # 修改 MySQL 密码；端口默认 7998/7999
 docker compose up -d --build
 ```
 
-首次构建需要从网络下载 Maven、npm 依赖，通常 3–10 分钟，取决于服务器网络。查看进度：
+检查状态：
 
 ```bash
 docker compose ps
-docker compose logs -f mysql
 docker compose logs -f backend
+docker compose logs -f frontend
 ```
 
-当 `docker compose ps` 中 `mysql` 和 `backend` 显示 `healthy`、`frontend` 显示 `running` 后即可访问。
+容器端口只绑定回环地址：
 
-### 4.4 访问入口
+- `127.0.0.1:7998 -> frontend:80`
+- `127.0.0.1:7999 -> backend:7999`
+- MySQL 不映射宿主机端口
 
-| 页面 | 地址 |
-|---|---|
-| 调度台（仪表盘） | `http://<服务器IP>:8080/` |
-| 用户下单 | `http://<服务器IP>:8080/shop` |
-| 仓库 PDA | `http://<服务器IP>:8080/pda` |
-| 健康检查 | `http://<服务器IP>:8081/api/meta/warehouses` |
+验证后端（在服务器上）：
 
-如果不想暴露后端端口，删除 `docker-compose.yml` 中 `backend.ports` 的两行映射即可，前端仍可通过 Nginx 代理访问 API。
+```bash
+curl -fsS http://127.0.0.1:7999/api/meta/warehouses
+curl -I http://127.0.0.1:7998/
+```
 
-## 5. 测试数据说明
+## 5. 配置宿主机 nginx
 
-`database/init-test.sql` 在 MySQL 数据卷首次初始化时自动执行，内容如下：
+把 `deploy/nginx-pick.conf` 中的 `server` 块加入 nginx 的 `http {}` 配置，或：
 
-| 表 | 数量 | 说明 |
-|---|---:|---|
-| `warehouse` | 2 | 测试仓库A、测试仓库B |
-| `goods` | 8 | 测试商品01–08，分类为测试分类A–D |
-| `inventory` | 15 | 仓库A 8 条，仓库B 7 条；含库存不足、零库存场景 |
-| `inventory_snapshot` | 15 | 与库存对应的初始快照 |
-| `pick_task` | 7 | 已下发 2、待下发 3、已拣出 1、缺货 1 |
-| `customer_order` | 7 | 待分配 3、已下发 1、拣货中 1、已完成 1、缺货 1 |
-| `replenishment` | 1 | 1 张补货单，含 2 条明细 |
-| `notification_log` | 3 | 对应已下发任务的通知日志 |
+```bash
+sudo cp deploy/nginx-pick.conf /etc/nginx/conf.d/pick-dispatch.conf
+sudo nginx -t
+sudo systemctl reload nginx
+```
 
-三个待下发任务分别覆盖：
+核心配置如下（完整版见 `deploy/nginx-pick.conf`）：
 
-- `PENDING / INSUFFICIENT_STOCK`：仓库B 商品02 需要 10，库存只有 6；
-- `PENDING / SNAPSHOT_STALE`：仓库B 商品03 快照为 45 分钟前；
-- `PENDING / NO_INVENTORY`：仓库B 商品08 没有库存记录。
+```nginx
+server {
+    listen 80;
+    server_name 39.106.14.83;
 
-预期仪表盘统计：
+    location = /pick {
+        return 301 /pick/;
+    }
 
-```json
-{
-  "totalTasks": 7,
-  "pending": 3,
-  "dispatched": 2,
-  "fulfilled": 1,
-  "stockout": 1,
-  "inventoryRows": 15,
-  "staleInventory": 1
+    location /pick/api/ {
+        proxy_pass http://127.0.0.1:7999/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /pick/ws/ {
+        proxy_pass http://127.0.0.1:7999/ws/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+
+    location /pick/ {
+        proxy_pass http://127.0.0.1:7998/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
 ```
 
-### 注意：快照会随时间变旧
+`proxy_pass` 末尾的 `/` 很关键：它会去掉 `/pick/api/` 或 `/pick/` 前缀，后端仍然使用 `/api`、`/ws` 原始路径。
 
-库存的 `synced_at` 是初始化脚本执行时刻，后端默认把超过 **10 分钟**的快照视为过期。因此容器启动十分钟后再新建任务，库存充足的仓库A 也会进入待下发。测试时可以先刷新快照：
+### 如果 nginx 本身也是容器
+
+把 nginx 容器接入 `pick-dispatch-net`：
 
 ```bash
-# 刷新仓库A的库存时间戳，保留仓库B商品03的过期快照用于演示
-docker compose exec -T mysql sh -c \
-  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot pick_dispatch \
-   -e "UPDATE inventory SET synced_at = NOW(6), version = version + 1 WHERE warehouse_id = 1;"'
+docker network connect pick-dispatch-net <nginx-container>
 ```
 
-也可以在前端“补货/同步”页面提交一笔补货，系统会同时刷新库存并重新扫描待下发任务。
+然后把地址改成 Docker 服务名：
 
-## 6. 数据初始化与重置
+```nginx
+proxy_pass http://backend:7999/api/;
+proxy_pass http://backend:7999/ws/;
+proxy_pass http://frontend:80/;
+```
 
-### 6.1 为什么重启后没有重复插入数据
+不需要映射 7998/7999 到宿主机；容器之间通过 `pick-dispatch-net` 直接通信。
 
-MySQL 官方镜像只在数据目录为空时执行 `/docker-entrypoint-initdb.d/` 下的脚本。只要 `mysql-data` 数据卷还在，`init-test.sql` 就不会再次执行。
+## 6. WebSocket 连通性验证
 
-### 6.2 完全重置测试环境
+WebSocket 地址：
+
+```text
+ws://39.106.14.83/pick/ws/picking
+```
+
+浏览器控制台验证：
+
+```js
+const ws = new WebSocket('ws://39.106.14.83/pick/ws/picking')
+ws.onopen = () => console.log('WS connected')
+ws.onmessage = (event) => console.log('WS message', event.data)
+```
+
+预期：连接成功，下单/认领/完成时收到 `TASK_DISPATCHED`、`TASK_CLAIMED`、`TASK_COMPLETED`。
+
+也可以用 `wscat`：
+
+```bash
+npx wscat -c ws://39.106.14.83/pick/ws/picking
+```
+
+如果返回 400/426/502，优先检查：
+
+1. `/pick/ws/` 的 `Upgrade` / `Connection` 头是否存在；
+2. `proxy_read_timeout` 是否足够长；
+3. 后端容器健康检查是否通过；
+4. 宿主机 nginx 是否把 `/pick/ws/` 错误地转到了前端容器；
+5. 后端端口是否仍为 7999（`docker compose ps`）。
+
+## 7. 页面联调流程
+
+1. 打开 `http://39.106.14.83/pick/`，看到调度台仪表盘。
+2. 打开 `http://39.106.14.83/pick/shop`，选择商品/数量下单：
+   - 库存足够且快照新鲜 → 订单“已分配”，PDA 收到实时通知；
+   - 库存不足/快照过期 → 订单“待分配”。
+3. 打开 `http://39.106.14.83/pick/pda`，填写拣货员名称：
+   - 待认领任务点击“认领任务” → 订单变为“拣货中”；
+   - 点击“拣出完成”/“缺货” → 订单闭环。
+4. 在调度台查看任务、待下发队列、库存和补货。
+
+## 8. 测试数据与重置
+
+`database/init-test.sql` 会在 MySQL 数据卷首次创建时执行，写入：
+
+- 2 个测试仓库、8 个测试商品、15 条库存；
+- 若干测试任务/订单。
+
+演示数据均为虚构值，不作为业务结论依据。
+
+需要重置测试数据时（**会删除 MySQL 数据卷**）：
 
 ```bash
 docker compose down -v
 docker compose up -d --build
 ```
 
-`-v` 会删除 `mysql-data` 数据卷，下次启动重新执行初始化脚本。**该操作会清空数据库，请确认不要用于有真实数据的实例。**
-
-### 6.3 对已有数据卷重新执行初始化脚本
+只重启服务、保留数据：
 
 ```bash
-docker compose exec -T mysql sh -c \
-  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot pick_dispatch' < database/init-test.sql
+docker compose restart
 ```
 
-脚本会先 DROP 再重建业务表，同样会清空现有数据。
-
-## 7. 常用运维命令
+## 9. 更新代码
 
 ```bash
-# 查看状态
-docker compose ps
-
-# 查看日志
-docker compose logs -f backend
-docker compose logs -f frontend
-docker compose logs -f mysql
-
-# 重启单个服务
-docker compose restart backend
-
-# 停止（保留数据）
-docker compose stop
-
-# 停止并删除容器网络（保留数据卷）
-docker compose down
-
-# 升级：拉取代码后重新构建镜像
 git pull
 docker compose up -d --build
 ```
 
-### 备份与恢复
+- 后端代码变化：重新构建 backend。
+- 前端代码变化：重新构建 frontend（会重新执行 `npm run build`，使用 `/pick/` base）。
+- 仅 nginx 路径变化：修改 `deploy/nginx-pick.conf`，`nginx -t && systemctl reload nginx`。
 
-```bash
-# 备份
-docker compose exec -T mysql sh -c \
-  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqldump -uroot --single-transaction --databases pick_dispatch' \
-  > backup-$(date +%F).sql
+## 10. 常见问题
 
-# 恢复
-cat backup-2026-10-17.sql | docker compose exec -T mysql sh -c \
-  'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot'
-```
-
-## 8. 部署后验证
-
-```bash
-# 仓库主数据
-curl http://127.0.0.1:8081/api/meta/warehouses
-
-# 仪表盘统计
-curl http://127.0.0.1:8081/api/dashboard/summary
-
-# 任务列表
-curl "http://127.0.0.1:8081/api/pick-tasks?size=10"
-
-# 订单列表
-curl http://127.0.0.1:8081/api/orders
-```
-
-页面验证：
-
-1. 打开 `/`，仪表盘应显示 7 个任务、3 个待下发、15 条库存；
-2. 打开 `/shop`，用测试商品01 下单 2 件，应直接下发并进入“已下发”；
-3. 打开 `/pda`，应看到已下发任务，可认领、拣出或标记缺货；
-4. 打开 `/pending`，应看到库存不足、快照过期、无库存三个待下发任务；
-5. 打开 `/inventory`，仓库B 商品03 应标记为“快照过期”。
-
-## 9. 常见问题
-
-| 现象 | 排查与处理 |
+| 现象 | 排查 |
 |---|---|
-| 页面能打开，接口 502 | 后端未就绪或启动失败。`docker compose logs backend` 查看是否连不上 MySQL；等待 healthcheck 通过 |
-| 数据库里没有测试数据 | `mysql-data` 卷不是首次创建。执行 `docker compose down -v` 后重新启动 |
-| 启动报 `Port is already allocated` | 修改 `.env` 中的 `WEB_PORT` / `API_PORT`，重新 `docker compose up -d` |
-| MySQL 容器健康检查一直失败 | 检查 `.env` 密码是否含特殊字符、数据卷权限；`docker compose logs mysql` |
-| 后端连接 MySQL 超时 | 确认使用 `mysql` 作为主机名（容器网络），不要写 `localhost` |
-| WebSocket 建连失败 | 若在 Nginx 前还有一层反向代理，需要同样开启 `Upgrade` / `Connection` 头；仓库内 Nginx 配置已处理 |
-| 中文乱码 | 初始化脚本和 MySQL 已配置 `utf8mb4`；自建库时确认数据库、表和连接都使用 utf8mb4 |
-| 时间差 8 小时 | compose 已设置 `TZ=Asia/Shanghai` 和 MySQL `--default-time-zone=+08:00`；自建环境需保持一致 |
-| 镜像/依赖下载慢 | 为 Docker、Maven、npm 配置可用镜像源，或在有网络的机器上构建后推送私有镜像仓库 |
+| `/pick/` 白屏、资源 404 | 前端是否用 `VITE_APP_BASE=/pick/` 构建；宿主机 nginx 是否去掉 `/pick/` 前缀转发到 7998 |
+| `/pick/api/...` 502 | 后端容器是否健康；`docker compose ps`；`docker compose logs backend` |
+| WebSocket 连接失败/400 | 检查 `/pick/ws/` 的 Upgrade 头、超时时间、转发路径 |
+| 页面能打开但请求 404 | 前端构建 base 与 nginx 路径不一致；确认访问的是 `/pick/` 而不是 `/` |
+| 7998/7999 被外部访问 | compose 已绑定 `127.0.0.1`；检查是否被其他配置覆盖 |
+| MySQL 连接失败 | 检查 `.env` 密码、`docker compose logs mysql`；数据卷初始化只执行一次 |
+| 端口被占用 | 修改 `.env` 的 `WEB_PORT`/`API_PORT`，同步修改 nginx `proxy_pass` |
+| 登录后旧数据残留 | `docker compose down -v` 重置测试库（会删数据） |
 
-## 10. 安全建议
+## 11. 安全与边界
 
-1. 修改 `.env` 中的默认密码，不要使用示例值。
-2. 不要将 MySQL 3306 端口暴露到公网。
-3. 后端 `API_PORT` 仅在需要直连调试时开放；生产环境建议只暴露 Nginx。
-4. 生产环境在 Nginx 前配置 HTTPS，并限制 WebSocket 允许的 Origin（当前代码为演示方便允许所有来源）。
-5. `database/init-test.sql` 是测试脚本，包含 DROP TABLE；生产环境应改用独立的迁移脚本（如 Flyway/Liquibase）并关闭 `app.demo.enabled`。
-6. `.env`、数据库备份文件不要提交到 Git。
+- 对外只开放 80；7998/7999 绑定 `127.0.0.1`；MySQL 不映射宿主机。
+- 演示项目没有登录/权限体系，拣货员名称由前端输入；生产环境需补认证、审计和 WebSocket 鉴权。
+- 通知当前为日志桩；生产环境应接短信/企业微信/消息队列，并加重试与幂等。
+- 当前 WebSocket 为单实例内存会话；多实例部署需要 Redis Pub/Sub 或 STOMP broker。
+- `database/init-test.sql` 只用于测试环境，不要用于生产数据。

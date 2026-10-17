@@ -8,6 +8,10 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+
+# The app is served publicly under /pick/ by the host nginx.
+ARG VITE_APP_BASE=/pick/
+ENV VITE_APP_BASE=$VITE_APP_BASE
 RUN npm run build
 
 # ---- Runtime stage ----

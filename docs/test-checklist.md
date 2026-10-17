@@ -13,7 +13,7 @@
 | 前端 | Vite dev server，端口 5174，`VITE_BACKEND=http://localhost:8099` |
 | 浏览器 | `playwright-cli` 0.1.22 + 本地 Chrome，会话 `admin` / `shop` / `pda` |
 
-原有的 `pick_dispatch` 库、8080 后端和 5173 前端未改动。API 测试与浏览器测试分别从 `init-test.sql` 重新初始化测试库，两轮互不影响。
+测试使用隔离的 8099/5174 环境；当前演示部署为后端 7999、前端 7998，并通过宿主机 nginx 的 `/pick/` 路径对外提供。原有的 `pick_dispatch` 库未被测试过程修改。API 测试与浏览器测试分别从 `init-test.sql` 重新初始化测试库，两轮互不影响。
 
 ## 2. 测试顺序与理由
 
