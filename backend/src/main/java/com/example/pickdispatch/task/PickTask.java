@@ -65,6 +65,18 @@ public class PickTask {
     @Column(name = "request_no", unique = true, length = 64)
     private String requestNo;
 
+    @Column(name = "order_id")
+    private Long orderId;
+
+    @Column(name = "order_no", length = 64)
+    private String orderNo;
+
+    @Column(name = "claimed_by", length = 64)
+    private String claimedBy;
+
+    @Column(name = "claimed_at")
+    private LocalDateTime claimedAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -21,4 +21,6 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
     List<Inventory> findAllByOrderByWarehouseIdAscGoodsIdAsc();
 
     List<Inventory> findByWarehouseIdOrderByGoodsIdAsc(Long warehouseId);
+
+    List<Inventory> findByGoodsIdOrderByAvailableQtyDesc(Long goodsId);
 }

@@ -4,6 +4,8 @@ import TaskView from '../views/TaskView.vue'
 import PendingView from '../views/PendingView.vue'
 import ReplenishmentView from '../views/ReplenishmentView.vue'
 import InventoryView from '../views/InventoryView.vue'
+import ShopView from '../views/ShopView.vue'
+import PdaView from '../views/PdaView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -12,7 +14,9 @@ const router = createRouter({
     { path: '/tasks', name: 'tasks', component: TaskView },
     { path: '/pending', name: 'pending', component: PendingView },
     { path: '/replenishment', name: 'replenishment', component: ReplenishmentView },
-    { path: '/inventory', name: 'inventory', component: InventoryView }
+    { path: '/inventory', name: 'inventory', component: InventoryView },
+    { path: '/shop', name: 'shop', component: ShopView, meta: { standalone: true } },
+    { path: '/pda', name: 'pda', component: PdaView, meta: { standalone: true } }
   ]
 })
 

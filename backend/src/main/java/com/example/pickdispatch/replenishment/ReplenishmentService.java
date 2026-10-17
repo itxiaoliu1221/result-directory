@@ -122,6 +122,8 @@ public class ReplenishmentService {
                 eventPublisher.publishEvent(new TaskDispatchedEvent(
                         task.getId(),
                         task.getTaskNo(),
+                        task.getOrderId(),
+                        task.getOrderNo(),
                         task.getWarehouseId(),
                         warehouse.getName(),
                         task.getGoodsId(),

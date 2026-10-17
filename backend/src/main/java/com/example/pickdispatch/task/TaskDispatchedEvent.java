@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 public record TaskDispatchedEvent(
         Long taskId,
         String taskNo,
+        Long orderId,
+        String orderNo,
         Long warehouseId,
         String warehouseName,
         Long goodsId,

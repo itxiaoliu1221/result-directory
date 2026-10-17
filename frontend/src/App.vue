@@ -1,5 +1,7 @@
 <template>
-  <el-container class="app-shell">
+  <router-view v-if="route.meta.standalone" />
+
+  <el-container v-else class="app-shell">
     <el-aside width="228px" class="sidebar">
       <div class="brand">
         <div class="brand-mark">W</div>
@@ -25,6 +27,12 @@
         <el-menu-item index="/inventory">
           <span>库存</span>
         </el-menu-item>
+        <el-menu-item index="/shop">
+          <span>用户下单</span>
+        </el-menu-item>
+        <el-menu-item index="/pda">
+          <span>PDA 拣货</span>
+        </el-menu-item>
       </el-menu>
 
       <div class="sidebar-footer">
@@ -39,7 +47,11 @@
           <h2>{{ pageTitle }}</h2>
           <p class="muted">库存不足的任务先排队，补货同步后自动下发</p>
         </div>
-        <el-tag type="success" effect="plain" round>系统运行中</el-tag>
+        <div class="topbar-actions">
+          <el-tag :type="realtime.connected ? 'success' : 'warning'" effect="plain" round>
+            {{ realtime.connected ? '实时已连接' : '实时重连中' }}
+          </el-tag>
+        </div>
       </el-header>
 
       <el-main class="main">
@@ -50,16 +62,23 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { connectRealtime, useRealtime } from './realtime'
 
 const route = useRoute()
+const realtime = useRealtime()
+
 const titles = {
   '/': '仪表盘',
   '/tasks': '任务管理',
   '/pending': '待下发队列',
   '/replenishment': '补货 / 同步',
-  '/inventory': '库存'
+  '/inventory': '库存',
+  '/shop': '用户下单',
+  '/pda': 'PDA 拣货'
 }
 const pageTitle = computed(() => titles[route.path] || '拣货调度')
+
+onMounted(connectRealtime)
 </script>

@@ -42,6 +42,15 @@ public class TaskService {
 
     @Transactional
     public PickTaskResponse createTask(CreateTaskRequest request) {
+        return createTaskInternal(request, null, null);
+    }
+
+    @Transactional
+    public PickTaskResponse createTask(CreateTaskRequest request, Long orderId, String orderNo) {
+        return createTaskInternal(request, orderId, orderNo);
+    }
+
+    private PickTaskResponse createTaskInternal(CreateTaskRequest request, Long orderId, String orderNo) {
         Warehouse warehouse = metaService.requireWarehouse(request.warehouseId());
         Goods goods = metaService.requireGoods(request.goodsId());
 
@@ -69,6 +78,8 @@ public class TaskService {
         task.setGoodsId(request.goodsId());
         task.setRequiredQty(request.requiredQty());
         task.setRequestNo(requestNo);
+        task.setOrderId(orderId);
+        task.setOrderNo(orderNo);
 
         if (inventory == null) {
             task.setStatus(TaskStatus.PENDING);
@@ -104,6 +115,8 @@ public class TaskService {
         eventPublisher.publishEvent(new TaskDispatchedEvent(
                 saved.getId(),
                 saved.getTaskNo(),
+                saved.getOrderId(),
+                saved.getOrderNo(),
                 saved.getWarehouseId(),
                 warehouse.getName(),
                 saved.getGoodsId(),
@@ -166,8 +179,17 @@ public class TaskService {
         }
         task.setStatus(result == TaskResult.FULFILLED ? TaskStatus.FULFILLED : TaskStatus.STOCKOUT);
         task.setResult(result);
-        task.setCompletedAt(LocalDateTime.now());
+        LocalDateTime completedAt = LocalDateTime.now();
+        task.setCompletedAt(completedAt);
         PickTask saved = pickTaskRepository.save(task);
+        eventPublisher.publishEvent(new TaskCompletedEvent(
+                saved.getId(),
+                saved.getTaskNo(),
+                saved.getOrderId(),
+                saved.getOrderNo(),
+                result,
+                completedAt
+        ));
         return toResponse(saved,
                 metaService.requireWarehouse(saved.getWarehouseId()),
                 metaService.requireGoods(saved.getGoodsId()));
@@ -191,6 +213,8 @@ public class TaskService {
         return new PickTaskResponse(
                 task.getId(),
                 task.getTaskNo(),
+                task.getOrderId(),
+                task.getOrderNo(),
                 task.getWarehouseId(),
                 warehouse == null ? "未知仓库" : warehouse.getName(),
                 task.getGoodsId(),
@@ -202,6 +226,8 @@ public class TaskService {
                 task.getSnapshotQty(),
                 task.getSnapshotSyncedAt(),
                 snapshotAgeMinutes,
+                task.getClaimedBy(),
+                task.getClaimedAt(),
                 task.getCreatedAt(),
                 task.getDispatchedAt(),
                 task.getCompletedAt(),

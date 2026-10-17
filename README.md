@@ -1,10 +1,12 @@
 # 拣货任务下发系统
 
-基于**库存快照**的拣货任务前置校验系统：库存够就立即下发；库存不够、无库存或快照过期就进入待下发队列；补货/库存同步后按先进先出自动重扫下发；每次下发调用通知接口（当前为日志桩，接口可替换）。
+基于**库存快照**的多仓履约系统：用户在商城页下单，后端按库存自动选择仓库并创建拣货任务；库存够就立即下发，不够、无库存或快照过期就进入待下发队列；补货/库存同步后按先进先出自动重扫下发；任务下发通过 **WebSocket** 实时推送到仓库 PDA；拣货员认领后订单变为“拣货中”，拣货完成后订单闭环。每次下发同时调用通知接口（当前为日志桩，接口可替换）。
 
-技术栈：**Spring Boot 3.2 + Java 17 + MySQL 8 + Vue 3 + Vite + Element Plus**。
+技术栈：**Spring Boot 3.2 + Java 17 + MySQL 8 + Vue 3 + Vite + Element Plus + WebSocket**。
 
-![仪表盘](docs/screenshots/dashboard.png)
+![用户下单](docs/screenshots/shop.png)
+
+![PDA 实时任务](docs/screenshots/pda-realtime.png)
 
 ## 我的判断
 
@@ -51,24 +53,29 @@
 ### 业务流程
 
 ```
-创建拣货任务
+用户下单（可选择仓库，也可由后端自动选有货仓）
    │
-   ├─ 查询该仓库 + 货物的库存快照
+   ├─ 创建订单，同时创建拣货任务
+   │     │
+   │     ├─ 查询该仓库 + 货物的库存快照
+   │     ├─ 库存足够且快照未过期 ──→ DISPATCHED，预占库存
+   │     └─ 否则 ──→ PENDING（库存不足 / 快照过期 / 无库存）
    │
-   ├─ 库存足够且快照未过期 ──→ 创建 DISPATCHED 任务，预占库存，调用通知接口
+   ├─ 任务 DISPATCHED ──→ WebSocket 推送 TASK_DISPATCHED ──→ 仓库 PDA 出现待认领任务
    │
-   └─ 否则 ──→ 创建 PENDING 任务（原因：库存不足 / 快照过期 / 无库存）
-                   │
-                   └─ 补货 / 库存同步
-                         │
-                         └─ 按创建时间 FIFO 扫描待下发任务
-                               ├─ 够 → DISPATCHED，扣减库存，调用通知接口
-                               └─ 不够 → 继续等待
+   ├─ 补货 / 库存同步
+   │     └─ 按创建时间 FIFO 扫描待下发任务
+   │           ├─ 够 → DISPATCHED，扣减库存，WebSocket 推送
+   │           └─ 不够 → 继续等待
+   │
+   └─ PDA 认领 ──→ 订单 PICKING（拣货中），WebSocket 推送 TASK_CLAIMED
+         │
+         └─ 拣出/缺货回传 ──→ 订单 PICKED / STOCKOUT，WebSocket 推送 TASK_COMPLETED
 ```
 
 ### 后端
 
-- **数据表**：`warehouse`、`goods`、`inventory`、`inventory_snapshot`、`pick_task`、`replenishment`、`replenishment_item`、`notification_log`。
+- **数据表**：`warehouse`、`goods`、`inventory`、`inventory_snapshot`、`pick_task`、`customer_order`、`replenishment`、`replenishment_item`、`notification_log`。
 - **创建任务**：
   - 对 `inventory` 行加悲观锁，防止并发超卖；
   - 库存足够且快照年龄 <10 分钟 → `DISPATCHED` 并扣减库存；
@@ -87,11 +94,24 @@
   - 事务提交后触发（`@TransactionalEventListener(AFTER_COMMIT)`）；
   - 通知使用 `REQUIRES_NEW` 独立事务，失败只记录日志，不影响任务下发。
 - **结果回传**：`DISPATCHED` 任务可回传 `FULFILLED` / `STOCKOUT`，形成闭环。
+- **订单与仓库分配**：
+  - 用户下单时可以选择仓库；不选时，后端按“有货且快照新鲜”优先选择，其次选库存最多的仓，再退到第一个仓；
+  - 订单状态：`PENDING → DISPATCHED → PICKING → PICKED / STOCKOUT`；
+  - 下单与拣货任务在同一事务内创建，任务通过 `order_id` / `order_no` 关联订单。
+- **PDA 认领**：
+  - `POST /api/pick-tasks/{id}/claim`，对任务行加悲观锁，防止两个人同时认领；
+  - 认领成功后订单变为 `PICKING`，并记录认领人和认领时间。
+- **实时推送**：
+  - 原生 WebSocket `/ws/picking`，广播 `TASK_DISPATCHED`、`TASK_CLAIMED`、`TASK_COMPLETED` 三类消息；
+  - 消息在事务提交后发送（`@TransactionalEventListener(AFTER_COMMIT)`），附带 `eventId` 供前端去重；
+  - 当前是单机内存会话，生产环境可替换为 STOMP + 消息队列。
 
 ### 前端
 
-Vue 3 + Element Plus，五个页面：
+Vue 3 + Element Plus，七个页面：
 
+- **用户下单 `/shop`**：选择商品/数量/收货人，可选仓库或自动分配；订单列表实时展示“待分配 / 已分配 / 拣货中 / 已完成 / 缺货”。
+- **PDA 拣货 `/pda`**：模拟仓库手持终端；待认领任务卡片、认领、拣出完成/缺货回传；WebSocket 新任务弹窗通知。
 - **仪表盘**：任务总数、待下发、已下发、库存快照过期数、待下发队列、库存关注。
 - **任务管理**：创建任务、按状态/仓库/货物筛选、回传拣出/缺货。
 - **待下发队列**：等待时长、原因、创建时快照年龄。
@@ -100,13 +120,18 @@ Vue 3 + Element Plus，五个页面：
 
 ![任务管理](docs/screenshots/tasks.png)
 
+用户下单页与 PDA 页共用同一个 Vue 进程；`/api` 与 `/ws` 都由 Vite 代理到后端，便于本地演示。
+
 ### 关键设计取舍
 
 1. **快照新鲜度可配置**：`dispatch.max-snapshot-age-minutes` 默认 10；设为 `<=0` 可关闭，严格按数量判断。
 2. **严格 FIFO**：补货后先满足更早的待下发任务；如果当前任务库存不够就停止，不跳过它去下发更小的任务，保证公平。
 3. **预占库存**：任务下发时扣减 `available_qty`；如果后续回传缺货，只记录结果，不自动回补，留待对账。
 4. **通知与业务解耦**：接口先留桩，未来可替换短信/企业微信/站内信，不影响下发事务。
-5. **不做登录权限**：演示聚焦核心流程；生产化时再加认证和操作审计。
+5. **订单状态跟随任务状态**：下单与任务创建同事务；补货触发下发、PDA 认领、结果回传都会更新订单状态。
+6. **认领防并发**：认领时对任务行加悲观锁，重复认领返回 409。
+7. **实时消息可去重**：每条 WebSocket 消息带 `eventId`，前端按 id 去重；断线自动重连。
+8. **不做登录权限**：演示聚焦核心流程；生产化时再加认证、操作审计和 WebSocket 鉴权。
 
 ## 怎么证明有用
 
@@ -151,9 +176,9 @@ snapshot_age_min >= 10  且  warehouse != '华东一号分拨仓'
 
 ### 系统侧：真实 MySQL 联调结果
 
-9 个后端集成测试全部通过，覆盖：库存足够立即下发、库存不足待下发、快照过期待下发、补货 FIFO 自动下发、部分补货、过期任务补货后下发、任务幂等、补货单幂等、结果回传。
+**15 个后端集成测试全部通过**（任务链路 9 个 + 订单链路 6 个），覆盖：库存足够立即下发、库存不足待下发、快照过期待下发、补货 FIFO 自动下发、部分补货、过期任务补货后下发、任务幂等、补货单幂等、结果回传、下单即分配、下单后补货分配、PDA 认领、重复认领拒绝、完成后订单状态、自动选有货仓。
 
-真实 MySQL 接口冒烟结果：
+真实 MySQL + 浏览器联调结果：
 
 - 库存 16、需求 2 → `DISPATCHED`，库存扣减；
 - 库存 0、需求 4 → `PENDING / INSUFFICIENT_STOCK`；
@@ -161,7 +186,11 @@ snapshot_age_min >= 10  且  warehouse != '华东一号分拨仓'
 - 补货 10 → FIFO 自动下发 2 个待下发任务，剩余 1；
 - 补货 1 → 过期任务自动下发，剩余 22；
 - 结果回传 → `FULFILLED`；
-- `notification_log` 落库 5 条，均为 `TASK_DISPATCHED / LOG / SUCCESS`。
+- `notification_log` 落库 5 条，均为 `TASK_DISPATCHED / LOG / SUCCESS`；
+- 用户下单且库存充足 → 订单 `DISPATCHED`，PDA 收到 `TASK_DISPATCHED` 并弹出“新任务待认领”；
+- PDA 认领 → 订单 `PICKING`，收到 `TASK_CLAIMED`；
+- 拣出完成 → 订单 `PICKED`，收到 `TASK_COMPLETED`；
+- 页面状态在 WebSocket 事件后自动刷新，也可以通过 5 秒轮询兜底。
 
 ### 复现命令
 
@@ -214,7 +243,13 @@ npm install
 npm run dev
 ```
 
-打开 `http://localhost:5173`。Vite 已将 `/api` 代理到 `http://localhost:8080`。
+打开：
+
+- 调度台：`http://localhost:5173`
+- 用户下单：`http://localhost:5173/shop`
+- 仓库 PDA：`http://localhost:5173/pda`
+
+Vite 已将 `/api` 与 `/ws` 代理到 `http://localhost:8080`。如果后端不在 8080，可以设置 `VITE_BACKEND=http://localhost:8081` 后再启动前端。
 
 ### 4. 关闭演示数据
 
@@ -224,7 +259,7 @@ app:
     enabled: false
 ```
 
-演示数据包括 4 个仓库、10 个品类、40 条库存和 2 条待下发任务。**库存数量为演示值，仅用于展示三种场景，不作为业务结论依据。**
+演示数据包括 4 个仓库、10 个品类、40 条库存和 2 条待下发任务；订单由用户在 `/shop` 页面创建。**库存数量为演示值，仅用于展示三种场景，不作为业务结论依据。**
 
 ## API 一览
 
@@ -232,14 +267,36 @@ app:
 |---|---|---|
 | GET | `/api/meta/warehouses` | 仓库列表 |
 | GET | `/api/meta/goods` | 货物列表 |
+| POST | `/api/orders` | 用户下单，后端选择仓库并创建任务 |
+| GET | `/api/orders` | 订单列表（status 可选） |
+| GET | `/api/orders/{id}` | 订单详情 |
 | POST | `/api/pick-tasks` | 创建任务（自动判断下发/待下发） |
 | GET | `/api/pick-tasks` | 任务分页查询（status/warehouseId/goodsId） |
 | GET | `/api/pick-tasks/{id}` | 任务详情 |
+| POST | `/api/pick-tasks/{id}/claim` | PDA 认领任务，订单变为拣货中 |
 | POST | `/api/pick-tasks/{id}/result` | 回传拣货结果 |
 | GET | `/api/inventory` | 库存查询（warehouseId） |
 | POST | `/api/replenishments` | 补货/同步，触发待下发扫描 |
 | GET | `/api/replenishments` | 最近补货记录 |
 | GET | `/api/dashboard/summary` | 仪表盘统计 |
+| WS | `/ws/picking` | 实时推送任务下发/认领/完成消息 |
+
+下单：
+
+```json
+POST /api/orders
+{ "goodsId": 3, "quantity": 2, "customerName": "张三", "warehouseId": 1 }
+```
+
+`warehouseId` 可省略；后端优先选择库存足够且快照新鲜的仓。
+
+WebSocket 消息：
+
+```json
+{ "eventId": "...", "type": "TASK_DISPATCHED", "data": { "taskId": 1, "orderNo": "SO-...", "goodsName": "生鲜冷链", "quantity": 2 } }
+{ "eventId": "...", "type": "TASK_CLAIMED", "data": { "taskId": 1, "pickerName": "PDA-01" } }
+{ "eventId": "...", "type": "TASK_COMPLETED", "data": { "taskId": 1, "result": "FULFILLED" } }
+```
 
 创建任务：
 
@@ -282,16 +339,23 @@ POST /api/replenishments
 4. **未回传补齐**：46 条未回传会影响缺货率估计，后续应补齐回传。
 5. **生产化**：补充登录权限、操作审计、Flyway 迁移、通知重试/消息队列、监控告警；当前通知为日志桩。
 6. **库存预占语义**：当前下发即扣减可用库存；生产环境可改为“预占 + 拣货确认后扣减”，并与 WMS 对账。
+7. **WebSocket 单机内存**：当前会话保存在单实例内存中，多实例部署需要 Redis Pub/Sub、STOMP broker 或消息队列；断线由前端 3 秒重连兜底。
+8. **订单能力简化**：未实现支付、收货地址、取消订单、售后等；订单状态只覆盖履约链路。
+9. **PDA 身份简化**：拣货员名称由前端输入，未接入账号体系；生产环境需要登录鉴权和操作审计。
 
 ## 仓库结构
 
 ```
 analysis/               可复现的数据分析脚本与结果
 backend/                Spring Boot 3.2 + Java 17 + MySQL 8
+  └─ .../order/         订单、仓库分配、PDA 认领
+  └─ .../realtime/      WebSocket 推送与事件监听
 frontend/               Vue 3 + Vite + Element Plus
+  └─ src/views/ShopView.vue   用户下单页
+  └─ src/views/PdaView.vue    仓库 PDA 页
 data/picks.csv          提供的原始数据（仅用于分析）
 database/init.sql       数据库初始化
-docs/screenshots/       UI 截图
+docs/screenshots/       UI 截图（含下单页、PDA、实时通知）
 PLAN.md                 实施计划
 README.md               本文件
 AI_LOG.md               AI 交互与纠错记录

@@ -12,6 +12,23 @@ export const reasonLabels = {
   NO_INVENTORY: '无库存记录'
 }
 
+export const orderStatusMeta = {
+  PENDING: { label: '待分配', type: 'warning' },
+  DISPATCHED: { label: '已分配', type: 'primary' },
+  PICKING: { label: '拣货中', type: 'success' },
+  PICKED: { label: '已完成', type: 'info' },
+  STOCKOUT: { label: '缺货', type: 'danger' },
+  CANCELLED: { label: '已取消', type: 'info' }
+}
+
+export function orderStatusLabel(status) {
+  return orderStatusMeta[status]?.label || status || '-'
+}
+
+export function orderStatusType(status) {
+  return orderStatusMeta[status]?.type || 'info'
+}
+
 export function statusLabel(status) {
   return statusMeta[status]?.label || status || '-'
 }
